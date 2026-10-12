@@ -1,0 +1,29 @@
+pydantic>=2.0
+langchain-core>=0.3.0
+langgraph>=0.2.0
+
+# LiteLLM routes reasoning, translation, RAG generation, and embeddings.
+litellm
+boto3
+
+# Parsing and OCR
+pdfplumber
+python-docx
+Pillow
+pdf2image
+pytesseract
+
+# Durable data, retrieval, and cache services
+psycopg[binary]
+qdrant-client
+redis
+
+# APIs and frontend
+fastapi
+uvicorn[standard]
+streamlit
+httpx
+
+# Configuration
+pyyaml
+python-dotenv

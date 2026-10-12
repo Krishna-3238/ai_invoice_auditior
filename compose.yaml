@@ -1,0 +1,97 @@
+name: invoice-auditor
+services:
+  postgres:
+    image: postgres:16.4
+    environment:
+      POSTGRES_DB: invoice_auditor
+      POSTGRES_USER: auditor
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-auditor-local}
+    ports: ["5432:5432"]
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backned/db/erp_schema.sql:/docker-entrypoint-initdb.d/01-erp.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U auditor -d invoice_auditor"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  qdrant:
+    image: qdrant/qdrant:v1.12.5
+    ports: ["6333:6333"]
+    volumes: ["qdrant_data:/qdrant/storage"]
+    healthcheck:
+      test: ["CMD", "bash", "-lc", "exec 3<>/dev/tcp/127.0.0.1/6333"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7.4.1-alpine
+    ports: ["6379:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  mock-erp:
+    build:
+      context: .
+      dockerfile: backned/api/Dockerfile
+    environment:
+      DATABASE_URL: postgresql://auditor:${POSTGRES_PASSWORD:-auditor-local}@postgres:5432/invoice_auditor
+    ports: ["8001:8000"]
+    depends_on:
+      postgres: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  agent:
+    build:
+      context: .
+      dockerfile: backned/Dockerfile
+    environment:
+      DATABASE_URL: postgresql://auditor:${POSTGRES_PASSWORD:-auditor-local}@postgres:5432/invoice_auditor
+      REDIS_URL: redis://redis:6379/0
+      QDRANT_URL: http://qdrant:6333
+      ERP_API_BASE_URL: http://mock-erp:8000
+      INCOMING_DIR: /app/backned/data/incoming/invoices
+      REPORTS_DIR: /app/outputs/reports
+      AWS_REGION_NAME: ${AWS_REGION_NAME:-us-east-1}
+      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-us-east-1}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
+    ports: ["8000:8000"]
+    volumes:
+      - ./backned/data/incoming:/app/backned/data/incoming:ro
+      - reports_data:/app/outputs/reports
+    depends_on:
+      postgres: {condition: service_healthy}
+      qdrant: {condition: service_healthy}
+      redis: {condition: service_healthy}
+      mock-erp: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  streamlit-ui:
+    build:
+      context: .
+      dockerfile: fronted/Dockerfile
+    environment:
+      AGENT_API_URL: http://agent:8000
+    ports: ["8501:8501"]
+    depends_on:
+      agent: {condition: service_healthy}
+
+volumes:
+  postgres_data:
+  qdrant_data:
+  reports_data:
