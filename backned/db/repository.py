@@ -25,6 +25,14 @@ def initialize_schema() -> None:
         conn.execute(sql)
 
 
+def mark_failed(file_path: str | Path, error: str) -> None:
+    path = Path(file_path)
+    checksum = checksum_file(path)
+    record_discovered(path)
+    with connect() as conn:
+        conn.execute("UPDATE audit.invoice_audit SET validation_status='failed', recommendation='manual_review', processing_error=%s, processed_at=now() WHERE file_checksum=%s", (error[:4000], checksum))
+
+
 def checksum_file(path: str | Path) -> str:
     digest = hashlib.sha256()
     with open(path, "rb") as stream:
@@ -39,13 +47,13 @@ def find_by_checksum(checksum: str) -> dict | None:
 
 
 def is_audited(checksum: str) -> bool:
-    """A discovered row is retried until a completed audit replaces it."""
+    """Discovered or failed files are retried until processing succeeds."""
     with connect() as conn:
         row = conn.execute(
             "SELECT validation_status FROM audit.invoice_audit WHERE file_checksum=%s",
             (checksum,),
         ).fetchone()
-    return bool(row and row["validation_status"] != "discovered")
+    return bool(row and row["validation_status"] not in {"discovered", "failed"})
 
 
 def record_discovered(path: str | Path) -> str:
@@ -86,7 +94,7 @@ def save_audit(*, file_path: str, raw_text: str, translated_text: str,
             invoice_date=excluded.invoice_date, currency=excluded.currency, total_amount=excluded.total_amount,
             validation_status=excluded.validation_status, recommendation=excluded.recommendation,
             extracted_raw=excluded.extracted_raw, report_json=excluded.report_json, report_html=excluded.report_html,
-            processed_at=now()""",
+            processing_error=NULL, processed_at=now()""",
           (invoice_id,file_path,checksum,extraction_method,raw_text,translated_text,source_language,
            report.get("translation_confidence"),report.get("vendor_name") or inv.get("vendor_name"),
            report.get("po_number") or inv.get("po_number"),report.get("invoice_no") or inv.get("invoice_no"),

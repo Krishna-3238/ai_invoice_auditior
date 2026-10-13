@@ -60,7 +60,7 @@ class InvoiceReport(BaseModel):
 
     #  Final recommendation 
     recommendation: Literal[
-        "auto_approve", "manual_review", "reject"
+        "approve", "manual_review", "reject"
     ] = Field(
         default="manual_review",
         description="Final recommendation for this invoice",

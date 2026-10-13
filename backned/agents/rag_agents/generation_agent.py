@@ -13,7 +13,6 @@ from langgraph.graph import StateGraph, END
 
 from backned.config.logging_setup import setup_logging
 from backned.tool_dispatch import invoke_tool_sync
-from backned.config.observability import observe, langfuse_context
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +36,6 @@ def generate_node(state: GenerationState) -> GenerationState:
         len(state["ranked_chunks"]), len(state["chat_history"]),
     )
     try:
-        # Invoke MCP tool (async-only tools are wrapped by invoke_tool_sync)
         result = invoke_tool_sync("response_synthesizer", {
             "query":         state["query"],
             "ranked_chunks": state["ranked_chunks"],
@@ -75,13 +73,11 @@ class GenerationAgent:
     def __init__(self) -> None:
         self._graph = build_generation_graph()
 
-    @observe(name="agent-rag-generation")
     def run(
         self,
         query: str,
         ranked_chunks: list[dict],
         chat_history: list[dict] | None = None,
-        callbacks: list | None = None,
     ) -> dict[str, Any]:
         """Run the generation agent.
 
@@ -94,6 +90,5 @@ class GenerationAgent:
             result={},
             error="",
         )
-        cfg = {"callbacks": callbacks} if callbacks else {}
-        final = self._graph.invoke(state, config=cfg)
+        final = self._graph.invoke(state)
         return final["result"]

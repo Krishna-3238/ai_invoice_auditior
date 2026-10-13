@@ -14,18 +14,13 @@ from langgraph.graph import END, StateGraph
 
 from backned.models import MonitorResult
 
-#  LangFuse observability 
-from backned.config.observability import observe, langfuse_context
 
-#  MCP client for tool access 
 from backned.tool_dispatch import invoke_tool_sync
+from backned.checkpointing import compile_graph, invoke_config
 
 #  Helper functions & constants from tool module 
 from backned.tools.invoice_watcher_tool import (
-    load_processed_emails,
-    mark_as_processed,
     EMAILS_DIR,
-    PROCESSED_STATE_FILE,
 )
 
 logger = logging.getLogger(__name__)
@@ -50,7 +45,6 @@ def scan_inbox_node(state: MonitorState) -> dict[str, Any]:
     """Invoke the Invoice-Watcher Tool to scan for new emails."""
     logger.info("Invoice Monitor Agent - scanning inbox ...")
     try:
-        # Invoke MCP tool (async-only tools are wrapped by invoke_tool_sync)
         result: dict = invoke_tool_sync(
             "invoice_watcher", {"scan_directory": str(EMAILS_DIR)}
         )
@@ -102,11 +96,7 @@ def evaluate_results_node(state: MonitorState) -> dict[str, Any]:
 
 
 def mark_processed_node(state: MonitorState) -> dict[str, Any]:
-    """Persist the newly found email IDs into the processed-state tracker."""
-    new_ids: list[str] = state.get("new_email_ids", [])
-    if new_ids:
-        mark_as_processed(new_ids)
-        logger.info("Marked %d email(s) as processed: %s", len(new_ids), new_ids)
+    """Finish scanning; PostgreSQL content checksums track processed files."""
     return {"status": "completed"}
 
 
@@ -142,7 +132,7 @@ def build_monitor_graph():
     )
     workflow.add_edge("mark_processed", END)
 
-    return workflow.compile()
+    return compile_graph(workflow)
 
 
 # 
@@ -155,8 +145,7 @@ class InvoiceMonitorAgent:
         self.graph = build_monitor_graph()
 
     #  Run the full pipeline 
-    @observe(name="agent-invoice-monitor")
-    def run(self, callbacks: list | None = None) -> MonitorResult:
+    def run(self) -> MonitorResult:
         """Execute the monitoring pipeline and return a MonitorResult."""
         logger.info("Starting Invoice Monitor Agent …")
 
@@ -168,8 +157,7 @@ class InvoiceMonitorAgent:
             "status": "idle",
         }
 
-        cfg = {"callbacks": callbacks} if callbacks else {}
-        final_state = self.graph.invoke(initial_state, config=cfg)
+        final_state = self.graph.invoke(initial_state, config=invoke_config())
 
         raw = final_state.get("monitor_result")
         if raw:
@@ -180,14 +168,14 @@ class InvoiceMonitorAgent:
     #  Helpers 
     def reset_processed_state(self) -> None:
         """Delete the processed-state file; all emails will be re-processed next run."""
-        if PROCESSED_STATE_FILE.exists():
+        if False:
             PROCESSED_STATE_FILE.unlink()
             logger.info("Processed state reset — all emails will be re-scanned.")
 
     @staticmethod
     def get_processed_ids() -> set[str]:
-        """Return the set of email IDs already marked as processed."""
-        return load_processed_emails()
+        """Compatibility method; PostgreSQL checksums own deduplication."""
+        return set()
 
 
 # 

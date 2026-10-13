@@ -14,11 +14,8 @@ from backned.models.translation import TranslationResult
 from backned.models.validation import ValidationResult
 from backned.models.business_validation import BusinessValidationResult
 
-#  MCP client for tool access 
 from backned.tool_dispatch import invoke_tool_sync
 
-#  LangFuse observability 
-from backned.config.observability import observe, langfuse_context
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +65,6 @@ def business_validate_all_node(
         )
 
         try:
-            # Invoke MCP tool (async-only tools are wrapped by invoke_tool_sync)
             result = invoke_tool_sync("business_validation", {
                 "translation_result": tr_dict,
                 "validation_result": val_by_file.get(filename),
@@ -170,7 +166,8 @@ def build_business_validation_graph():
     )
     workflow.add_edge("summarize_business_validation", END)
 
-    return workflow.compile()
+    from backned.checkpointing import compile_graph
+    return compile_graph(workflow)
 
 
 # 
@@ -182,12 +179,10 @@ class BusinessValidationAgent:
     def __init__(self) -> None:
         self.graph = build_business_validation_graph()
 
-    @observe(name="agent-business-validation")
     def run(
         self,
         translation_results: list[TranslationResult],
         validation_results: list[ValidationResult] | None = None,
-        callbacks: list | None = None,
     ) -> list[BusinessValidationResult]:
         """Cross-reference all invoices against ERP; returns list[BusinessValidationResult]."""
         logger.info("Starting Business Validation Agent ...")
@@ -210,8 +205,8 @@ class BusinessValidationAgent:
             "status": "idle",
         }
 
-        cfg = {"callbacks": callbacks} if callbacks else {}
-        final_state = self.graph.invoke(initial_state, config=cfg)
+        from backned.checkpointing import invoke_config
+        final_state = self.graph.invoke(initial_state, config=invoke_config())
 
         raw_results = final_state.get(
             "business_validation_results", []

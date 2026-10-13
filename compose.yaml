@@ -5,7 +5,7 @@ services:
     environment:
       POSTGRES_DB: invoice_auditor
       POSTGRES_USER: auditor
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-auditor-local}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
     ports: ["5432:5432"]
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -36,11 +36,12 @@ services:
       retries: 20
 
   mock-erp:
+    image: invoice-auditor-mock-erp:1.0
     build:
       context: .
       dockerfile: backned/api/Dockerfile
     environment:
-      DATABASE_URL: postgresql://auditor:${POSTGRES_PASSWORD:-auditor-local}@postgres:5432/invoice_auditor
+      DATABASE_URL: postgresql://auditor:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/invoice_auditor
     ports: ["8001:8000"]
     depends_on:
       postgres: {condition: service_healthy}
@@ -51,11 +52,12 @@ services:
       retries: 12
 
   agent:
+    image: invoice-auditor-agent:1.0
     build:
       context: .
       dockerfile: backned/Dockerfile
     environment:
-      DATABASE_URL: postgresql://auditor:${POSTGRES_PASSWORD:-auditor-local}@postgres:5432/invoice_auditor
+      DATABASE_URL: postgresql://auditor:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/invoice_auditor
       REDIS_URL: redis://redis:6379/0
       QDRANT_URL: http://qdrant:6333
       ERP_API_BASE_URL: http://mock-erp:8000
@@ -66,6 +68,10 @@ services:
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
       AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
+      BEDROCK_REASONING_MODEL: ${BEDROCK_REASONING_MODEL:-amazon.nova-lite-v1:0}
+      BEDROCK_TRANSLATION_MODEL: ${BEDROCK_TRANSLATION_MODEL:-cohere.command-r-plus-v1:0}
+      BEDROCK_RAG_MODEL: ${BEDROCK_RAG_MODEL:-cohere.command-r-plus-v1:0}
+      BEDROCK_EMBEDDING_MODEL: ${BEDROCK_EMBEDDING_MODEL:-amazon.titan-embed-text-v2:0}
     ports: ["8000:8000"]
     volumes:
       - ./backned/data/incoming:/app/backned/data/incoming:ro
@@ -82,6 +88,7 @@ services:
       retries: 12
 
   streamlit-ui:
+    image: invoice-auditor-ui:1.0
     build:
       context: .
       dockerfile: fronted/Dockerfile

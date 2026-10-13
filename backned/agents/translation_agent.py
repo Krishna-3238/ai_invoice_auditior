@@ -13,11 +13,8 @@ from langgraph.graph import END, StateGraph
 from backned.models.extraction import ExtractionResult
 from backned.models.translation import TranslationResult
 
-#  MCP client for tool access 
 from backned.tool_dispatch import invoke_tool_sync
 
-#  LangFuse observability 
-from backned.config.observability import observe, langfuse_context
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +58,6 @@ def translate_all_node(state: TranslationState) -> dict[str, Any]:
         )
 
         try:
-            # Invoke MCP tool (async-only tools are wrapped by invoke_tool_sync)
             result = invoke_tool_sync("lang_bridge", {
                 "extraction_result": ext_dict,
             })
@@ -176,7 +172,8 @@ def build_translation_graph():
     workflow.add_edge("translate_all", "verify_translations")
     workflow.add_edge("verify_translations", END)
 
-    return workflow.compile()
+    from backned.checkpointing import compile_graph
+    return compile_graph(workflow)
 
 
 # 
@@ -188,9 +185,8 @@ class TranslationAgent:
     def __init__(self) -> None:
         self.graph = build_translation_graph()
 
-    @observe(name="agent-translation")
     def run(
-        self, extraction_results: list[ExtractionResult], callbacks: list | None = None
+        self, extraction_results: list[ExtractionResult]
     ) -> list[TranslationResult]:
         """Translate all extraction results to English; returns list[TranslationResult]."""
         logger.info("Starting Translation Agent ...")
@@ -208,8 +204,8 @@ class TranslationAgent:
             "status": "idle",
         }
 
-        cfg = {"callbacks": callbacks} if callbacks else {}
-        final_state = self.graph.invoke(initial_state, config=cfg)
+        from backned.checkpointing import invoke_config
+        final_state = self.graph.invoke(initial_state, config=invoke_config())
 
         raw_results = final_state.get("translation_results", [])
         return [TranslationResult(**r) for r in raw_results]

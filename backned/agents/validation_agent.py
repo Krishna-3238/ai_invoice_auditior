@@ -13,11 +13,8 @@ from langgraph.graph import END, StateGraph
 from backned.models.translation import TranslationResult
 from backned.models.validation import ValidationResult
 
-#  MCP client for tool access 
 from backned.tool_dispatch import invoke_tool_sync
 
-#  LangFuse observability 
-from backned.config.observability import observe, langfuse_context
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +51,6 @@ def validate_all_node(state: ValidationState) -> dict[str, Any]:
         )
 
         try:
-            # Invoke MCP tool (async-only tools are wrapped by invoke_tool_sync)
             result = invoke_tool_sync("data_completeness_checker", {
                 "translation_result": tr_dict,
             })
@@ -156,7 +152,8 @@ def build_validation_graph():
     workflow.add_edge("validate_all", "summarize_validation")
     workflow.add_edge("summarize_validation", END)
 
-    return workflow.compile()
+    from backned.checkpointing import compile_graph
+    return compile_graph(workflow)
 
 
 # 
@@ -168,9 +165,8 @@ class ValidationAgent:
     def __init__(self) -> None:
         self.graph = build_validation_graph()
 
-    @observe(name="agent-validation")
     def run(
-        self, translation_results: list[TranslationResult], callbacks: list | None = None
+        self, translation_results: list[TranslationResult]
     ) -> list[ValidationResult]:
         """Validate all translation results; returns list[ValidationResult]."""
         logger.info("Starting Validation Agent ...")
@@ -188,8 +184,8 @@ class ValidationAgent:
             "status": "idle",
         }
 
-        cfg = {"callbacks": callbacks} if callbacks else {}
-        final_state = self.graph.invoke(initial_state, config=cfg)
+        from backned.checkpointing import invoke_config
+        final_state = self.graph.invoke(initial_state, config=invoke_config())
 
         raw_results = final_state.get("validation_results", [])
         return [ValidationResult(**r) for r in raw_results]

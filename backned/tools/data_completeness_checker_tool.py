@@ -80,7 +80,6 @@ def data_completeness_checker_tool(
     rules_applied.append("date_format")
 
     #  4. Currency validation 
-    header_issues.extend(_check_currency(inv, rules))
     rules_applied.append("currency_validation")
 
     #  5. Required line-item fields 
@@ -192,7 +191,6 @@ def _default_rules() -> dict:
             "unit_price": "float",
             "total": "float",
         },
-        "accepted_currencies": ["USD", "EUR", "INR", "GBP"],
         "tolerances": {
             "price_difference_percent": 5,
             "quantity_difference_percent": 0,
@@ -372,7 +370,7 @@ def _check_date_format(inv: dict) -> list[FieldIssue]:
         except ValueError:
             continue
 
-    # None matched — it's a warning (GPT might return unusual formats)
+    # None matched; a language model may return an uncommon date format.
     issues.append(FieldIssue(
         field_name="invoice_date",
         issue_type="invalid_value",

@@ -10,11 +10,10 @@ import logging
 from typing import TypedDict, Any, Literal
 
 from langgraph.graph import StateGraph, END
-from backned.llm import LiteLLMClient
+from backned.llm import invoke_bedrock_chat
 
 from backned.config.logging_setup import setup_logging
-from backned.config.settings import LITELLM_RAG_MODEL
-from backned.config.observability import observe, langfuse_context
+from backned.config.settings import BEDROCK_RAG_MODEL
 
 logger = logging.getLogger(__name__)
 
@@ -41,15 +40,6 @@ Respond ONLY with valid JSON in exactly this format:
 
 The application calculates the average of the three scores. Accept only when it is greater than 0.7.
 """
-
-_client: LiteLLMClient | None = None
-
-def _get_client() -> LiteLLMClient:
-    global _client
-    if _client is None:
-        _client = LiteLLMClient()
-    return _client
-
 
 #  State 
 
@@ -84,9 +74,8 @@ def reflect_node(state: ReflectionState) -> ReflectionState:
     )
 
     try:
-        client = _get_client()
-        resp = client.chat.completions.create(
-            model=LITELLM_RAG_MODEL,
+        content = invoke_bedrock_chat(
+            model_id=BEDROCK_RAG_MODEL,
             messages=[
                 {"role": "system", "content": _REFLECTION_SYSTEM},
                 {"role": "user",   "content": prompt},
@@ -95,7 +84,7 @@ def reflect_node(state: ReflectionState) -> ReflectionState:
             max_tokens=400,
         )
         import json
-        content = resp.choices[0].message.content or "{}"
+        content = content or "{}"
         content = content.strip().lstrip("```json").rstrip("```").strip()
         reflection = json.loads(content)
         scores = [float(reflection.get(key, 0)) for key in ("relevance", "groundedness", "context_relevance")]
@@ -181,7 +170,6 @@ class ReflectionAgent:
     def __init__(self) -> None:
         self._graph = build_reflection_graph()
 
-    @observe(name="agent-rag-reflection")
     def run(
         self,
         query: str,
@@ -190,7 +178,6 @@ class ReflectionAgent:
         invoice_id: str | None = None,
         chat_history: list[dict] | None = None,
         sources_used: list[str] | None = None,
-        callbacks: list | None = None,
     ) -> dict[str, Any]:
         """Evaluate the answer and return the final (possibly improved) answer.
 
@@ -208,8 +195,7 @@ class ReflectionAgent:
             final_answer="",
             error="",
         )
-        cfg = {"callbacks": callbacks} if callbacks else {}
-        final = self._graph.invoke(state, config=cfg)
+        final = self._graph.invoke(state)
         return {
             "final_answer": final["final_answer"] or answer,
             "reflection":   final["reflection"],

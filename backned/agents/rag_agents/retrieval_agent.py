@@ -13,7 +13,6 @@ from langgraph.graph import StateGraph, END
 
 from backned.config.logging_setup import setup_logging
 from backned.tool_dispatch import invoke_tool_sync
-from backned.config.observability import observe, langfuse_context
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +33,6 @@ def retrieve_node(state: RetrievalState) -> RetrievalState:
     """Call the semantic_retriever_tool and capture raw candidates."""
     logger.info("Retrieval Agent: query='%.80s'", state["query"])
     try:
-        # Invoke MCP tool (async-only tools are wrapped by invoke_tool_sync)
         result = invoke_tool_sync("semantic_retriever", {
             "query": state["query"],
             "top_k": state["top_k"],
@@ -64,15 +62,13 @@ class RetrievalAgent:
     def __init__(self) -> None:
         self._graph = build_retrieval_graph()
 
-    @observe(name="agent-rag-retrieval")
-    def run(self, query: str, top_k: int = 10, callbacks: list | None = None, invoice_id: str | None = None) -> dict[str, Any]:
+    def run(self, query: str, top_k: int = 10, invoice_id: str | None = None) -> dict[str, Any]:
         """Run the retrieval agent.
 
         Returns the retrieval result dict (query, chunks, total_indexed, status).
         """
         state = RetrievalState(query=query, top_k=top_k, invoice_id=invoice_id, result={}, error="")
-        cfg = {"callbacks": callbacks} if callbacks else {}
-        final = self._graph.invoke(state, config=cfg)
+        final = self._graph.invoke(state)
         return final["result"]
 
 

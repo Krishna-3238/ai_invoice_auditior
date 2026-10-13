@@ -13,7 +13,6 @@ from langgraph.graph import StateGraph, END
 
 from backned.config.logging_setup import setup_logging
 from backned.tool_dispatch import invoke_tool_sync
-from backned.config.observability import observe, langfuse_context
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +36,6 @@ def rank_node(state: AugmentationState) -> AugmentationState:
         len(state["chunks"]), state["top_n"],
     )
     try:
-        # Invoke MCP tool (async-only tools are wrapped by invoke_tool_sync)
         result = invoke_tool_sync("chunk_ranker", {
             "query":  state["query"],
             "chunks": state["chunks"],
@@ -71,8 +69,7 @@ class AugmentationAgent:
     def __init__(self) -> None:
         self._graph = build_augmentation_graph()
 
-    @observe(name="agent-rag-augmentation")
-    def run(self, query: str, chunks: list[dict], top_n: int = 5, callbacks: list | None = None) -> dict[str, Any]:
+    def run(self, query: str, chunks: list[dict], top_n: int = 5) -> dict[str, Any]:
         """Run the augmentation agent.
 
         Returns a dict with ranked_chunks (list), query (str), status (str).
@@ -80,6 +77,5 @@ class AugmentationAgent:
         state = AugmentationState(
             query=query, chunks=chunks, top_n=top_n, result={}, error=""
         )
-        cfg = {"callbacks": callbacks} if callbacks else {}
-        final = self._graph.invoke(state, config=cfg)
+        final = self._graph.invoke(state)
         return final["result"]

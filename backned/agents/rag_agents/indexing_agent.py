@@ -12,7 +12,6 @@ from langgraph.graph import StateGraph, END
 
 from backned.config.logging_setup import setup_logging
 from backned.tool_dispatch import invoke_tool_sync
-from backned.config.observability import observe, langfuse_context
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +30,6 @@ def index_node(state: IndexingState) -> IndexingState:
     """Call the vector_indexer_tool and capture the result."""
     logger.info("Indexing Agent: building / updating FAISS index ...")
     try:
-        # Invoke MCP tool (async-only tools are wrapped by invoke_tool_sync)
         result = invoke_tool_sync("vector_indexer", {"force_reindex": state["force_reindex"]})
         logger.info(
             "Indexing complete: %d chunk(s) indexed, status=%s",
@@ -61,15 +59,13 @@ class IndexingAgent:
     def __init__(self) -> None:
         self._graph = build_indexing_graph()
 
-    @observe(name="agent-rag-indexing")
-    def run(self, force_reindex: bool = False, callbacks: list | None = None) -> dict[str, Any]:
+    def run(self, force_reindex: bool = False) -> dict[str, Any]:
         """Run the indexing agent.
 
         Returns the indexing result dict.
         """
         state = IndexingState(force_reindex=force_reindex, result={}, error="")
-        cfg = {"callbacks": callbacks} if callbacks else {}
-        final = self._graph.invoke(state, config=cfg)
+        final = self._graph.invoke(state)
         if final["error"]:
             raise RuntimeError(final["error"])
         return final["result"]

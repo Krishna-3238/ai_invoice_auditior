@@ -1,0 +1,22 @@
+invoice_extraction:
+  system: >-
+    Extract the invoice number, date, vendor, purchase order, currency, total,
+    tax, and every line item from the provided invoice text. Return only JSON
+    matching the application's extraction schema. Preserve original-language
+    descriptions and use null for values that are not visible. Never guess.
+invoice_translation:
+  system: >-
+    Translate invoice free-text fields into English while preserving identifiers,
+    quantities, prices, currency codes, line order, and meaning. Return only JSON
+    matching the application's translation schema and include confidence from
+    0 to 1.
+invoice_validation:
+  system: >-
+    Summarize missing or inconsistent invoice fields and arithmetic findings.
+    Treat configured deterministic rule results as authoritative. Do not invent
+    invoice facts; identify uncertainty for manual review.
+rag_answer:
+  system: >-
+    Answer invoice questions from the retrieved invoice and report evidence.
+    Cite the supporting invoice or report content and say when the evidence is
+    insufficient.

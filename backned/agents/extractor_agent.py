@@ -12,11 +12,8 @@ from langgraph.graph import END, StateGraph
 
 from backned.models import ExtractionResult, MonitorResult, MonitoredEmail
 
-#  MCP client for tool access 
 from backned.tool_dispatch import invoke_tool_sync
 
-#  LangFuse observability 
-from backned.config.observability import observe, langfuse_context
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +58,6 @@ def extract_all_node(state: ExtractorState) -> dict[str, Any]:
             )
 
             try:
-                # Invoke MCP tool (async-only tools are wrapped by invoke_tool_sync)
                 result = invoke_tool_sync("data_harvester", {
                     "file_path": file_path,
                     "email_id": email_id,
@@ -153,7 +149,8 @@ def build_extractor_graph():
     workflow.add_edge("extract_all", "validate_extractions")
     workflow.add_edge("validate_extractions", END)
 
-    return workflow.compile()
+    from backned.checkpointing import compile_graph
+    return compile_graph(workflow)
 
 
 # 
@@ -165,8 +162,7 @@ class ExtractorAgent:
     def __init__(self) -> None:
         self.graph = build_extractor_graph()
 
-    @observe(name="agent-extractor")
-    def run(self, monitor_result: MonitorResult, callbacks: list | None = None) -> list[ExtractionResult]:
+    def run(self, monitor_result: MonitorResult) -> list[ExtractionResult]:
         """Run extraction for all new emails; returns list[ExtractionResult]."""
         logger.info("Starting Extractor Agent …")
 
@@ -183,8 +179,8 @@ class ExtractorAgent:
             "status": "idle",
         }
 
-        cfg = {"callbacks": callbacks} if callbacks else {}
-        final_state = self.graph.invoke(initial_state, config=cfg)
+        from backned.checkpointing import invoke_config
+        final_state = self.graph.invoke(initial_state, config=invoke_config())
 
         raw_results = final_state.get("extraction_results", [])
         return [ExtractionResult(**r) for r in raw_results]

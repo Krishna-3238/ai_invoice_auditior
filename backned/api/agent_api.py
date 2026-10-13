@@ -4,14 +4,18 @@ from __future__ import annotations
 from typing import Any
 from dataclasses import asdict, is_dataclass
 import re
+import threading
+import time
+import uuid
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
 from backned.db import repository
-from backned.config.settings import REDIS_URL, QDRANT_URL
+from backned.config.settings import REDIS_URL, QDRANT_URL, CHECKPOINT_DATABASE_URL, WATCH_INTERVAL_SECONDS
 
 app = FastAPI(title="Invoice Auditor Agent", version="1.0.0")
+_pipeline_lock = threading.Lock()
 
 
 def _plain(value):
@@ -29,6 +33,18 @@ def _plain(value):
 @app.on_event("startup")
 def startup():
     repository.initialize_schema()
+    watcher = threading.Thread(target=_watch_incoming, name="invoice-folder-watcher", daemon=True)
+    watcher.start()
+
+
+def _watch_incoming():
+    while True:
+        time.sleep(WATCH_INTERVAL_SECONDS)
+        try:
+            run_pipeline()
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception("Folder scan failed")
 
 
 @app.get("/health")
@@ -47,12 +63,33 @@ def health():
 
 @app.post("/api/pipeline/run")
 def run_pipeline():
+    if not _pipeline_lock.acquire(blocking=False):
+        return {"results": {}, "reports": [], "status": "already_running"}
     from fronted.pipeline_runner import PipelineRunner
-    result = PipelineRunner().run_full_pipeline()
+    from backned.checkpointing import set_checkpoint_context, reset_checkpoint_context
+    from langgraph.checkpoint.postgres import PostgresSaver
+    thread_id = str(uuid.uuid4())
+    try:
+        with PostgresSaver.from_conn_string(CHECKPOINT_DATABASE_URL) as saver:
+            saver.setup()
+            tokens = set_checkpoint_context(saver, thread_id)
+            try:
+                result = PipelineRunner().run_full_pipeline()
+            finally:
+                reset_checkpoint_context(tokens)
+    finally:
+        _pipeline_lock.release()
     extractions = {x.filename: _plain(x) for x in result.get("extraction_results", [])}
     translations = {x.filename: _plain(x) for x in result.get("translation_results", [])}
     reports = result.get("reporting_summary")
     report_items = _plain(getattr(reports, "reports", [])) if reports else []
+    completed_files = {item.get("filename") for item in report_items}
+    if result.get("errors"):
+        monitor = result.get("monitor_result")
+        for item in getattr(monitor, "new_emails", []):
+            for invoice_file in item.invoice_files:
+                if invoice_file.filename not in completed_files:
+                    repository.mark_failed(invoice_file.file_path, " | ".join(result["errors"]))
     for report in report_items:
         extraction = extractions.get(report.get("filename"), {})
         translation = translations.get(report.get("filename"), {})
@@ -66,6 +103,7 @@ def run_pipeline():
             extracted=extraction,
             report=report,
             extraction_method=extraction.get("file_format", "unknown"),
+            thread_id=thread_id,
         )
     from backned.services.qdrant_store import index_all
     index_all()

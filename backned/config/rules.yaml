@@ -51,12 +51,6 @@ tolerances:
 # -------------------------------------------------------------
 # 4. Currency Validation Rules
 # -------------------------------------------------------------
-accepted_currencies:
-  - USD
-  - EUR
-  - INR
-  - GBP
-
 # Define fallback mapping for currency symbols → ISO codes
 currency_symbol_map:
   "$": "USD"
@@ -72,8 +66,6 @@ validation_policies:
   missing_field_action: "flag"
   # If totals mismatch beyond tolerance
   total_mismatch_action: "manual_review"
-  # For currency not in accepted list
-  invalid_currency_action: "reject"
 
 # -------------------------------------------------------------
 # 6. Date Validation
@@ -87,10 +79,6 @@ date_validation:
     - "%d-%m-%Y"
     - "%B %d, %Y"
     - "%d.%m.%Y"
-  # Reject invoices dated more than N days in the future
-  max_future_days: 7
-  # Warn on invoices older than N days
-  stale_invoice_days: 365
 
 # -------------------------------------------------------------
 # 7. Reporting Parameters

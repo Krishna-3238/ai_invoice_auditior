@@ -1,4 +1,4 @@
-"""Lang-Bridge Tool — translates extracted invoice content into English using Azure OpenAI GPT-4o.
+"""Lang-Bridge Tool — translates invoice content into English using Amazon Bedrock.
 
 Passes through English invoices unchanged. Exposes a LangChain @tool for use by the Translation Agent.
 """
@@ -11,7 +11,7 @@ import logging
 from typing import Any
 
 from langchain_core.tools import tool
-from backned.llm import LiteLLMClient
+from backned.llm import invoke_bedrock_chat
 
 from backned.models.extraction import ExtractedInvoice, ExtractionResult
 from backned.models.translation import (
@@ -19,13 +19,10 @@ from backned.models.translation import (
     TranslatedLineItem,
     TranslationResult,
 )
-from backned.config.settings import LITELLM_TRANSLATION_MODEL
+from backned.config.settings import BEDROCK_TRANSLATION_MODEL
 from backned.config.settings import REDIS_URL
 
 logger = logging.getLogger(__name__)
-
-#  Module-level singleton variable 
-_client: LiteLLMClient | None = None
 
 
 # 
@@ -34,7 +31,7 @@ _client: LiteLLMClient | None = None
 @tool
 def lang_bridge_tool(extraction_result: dict) -> dict:
     """Lang-Bridge Tool — Translates extracted invoice content from
-    any language into English using Azure OpenAI GPT-4o.
+    any language into English using Amazon Bedrock.
 
     If the source language is already English, the data is passed
     through unchanged (no API call).  For non-English invoices, every
@@ -89,7 +86,7 @@ def lang_bridge_tool(extraction_result: dict) -> dict:
             translated_invoice=translated,
         ).model_dump()
 
-    #  Translate with GPT-4o 
+    # Translate with the configured Bedrock model.
     logger.info(
         "%s — translating from '%s' to English …",
         ext.filename, src_lang,
@@ -106,7 +103,7 @@ def lang_bridge_tool(extraction_result: dict) -> dict:
         if cached:
             translated_data = json.loads(cached)
         else:
-            translated_data = _translate_with_gpt(inv, src_lang)
+            translated_data = _translate_with_bedrock(inv, src_lang)
             cache.setex(cache_key, 86400, json.dumps(translated_data, ensure_ascii=False))
         translated_invoice = _build_translated_invoice(
             inv, translated_data, src_lang
@@ -135,18 +132,11 @@ def lang_bridge_tool(extraction_result: dict) -> dict:
 
 
 # 
-# Azure OpenAI client (lazy singleton)
+# Bedrock chat model
 # 
 
-def _get_client() -> LiteLLMClient:
-    global _client
-    if _client is None:
-        _client = LiteLLMClient()
-    return _client
-
-
 # 
-# GPT-4o translation prompt & call
+# Bedrock translation prompt and call
 # 
 
 _TRANSLATION_SYSTEM_PROMPT = """\
@@ -190,13 +180,11 @@ Rules for the response:
 """
 
 
-def _translate_with_gpt(
+def _translate_with_bedrock(
     invoice: ExtractedInvoice, source_language: str
 ) -> dict:
-    """Send the translatable fields to GPT-4o and return the
+    """Send the translatable fields to Bedrock and return the
     translated JSON dict."""
-    client = _get_client()
-
     # Build a compact representation of what needs translating
     translatable = {
         "source_language": source_language,
@@ -218,8 +206,8 @@ def _translate_with_gpt(
         f"{json.dumps(translatable, ensure_ascii=False, indent=2)}"
     )
 
-    response = client.chat.completions.create(
-        model=LITELLM_TRANSLATION_MODEL,
+    content = invoke_bedrock_chat(
+        model_id=BEDROCK_TRANSLATION_MODEL,
         messages=[
             {"role": "system", "content": _TRANSLATION_SYSTEM_PROMPT},
             {"role": "user", "content": user_msg},
@@ -228,7 +216,7 @@ def _translate_with_gpt(
         temperature=0.0,
     )
 
-    content = response.choices[0].message.content or "{}"
+    content = content or "{}"
     content = content.strip()
     # Strip markdown fences if the model adds them
     if content.startswith("```"):
@@ -241,7 +229,7 @@ def _translate_with_gpt(
 
 
 # 
-# Build TranslatedInvoice from GPT response + original
+# Build TranslatedInvoice from the model response and original
 # 
 
 def _build_translated_invoice(
@@ -249,7 +237,7 @@ def _build_translated_invoice(
     translated_data: dict,
     source_language: str,
 ) -> TranslatedInvoice:
-    """Merge the original numeric/code fields with the GPT-translated
+    """Merge the original numeric/code fields with the translated
     text fields into a TranslatedInvoice model."""
 
     #  Translated line items 

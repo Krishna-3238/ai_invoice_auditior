@@ -45,23 +45,13 @@ def _read(name: str):
 
 
 @app.get("/health")
-@app.get("/api/erp/health")
 def health():
     with _connect() as conn:
         conn.execute("SELECT 1 FROM erp.vendors LIMIT 1")
     return {"status": "healthy"}
 
 
-@app.get("/po")
-@app.get("/api/erp/po")
-def list_purchase_orders():
-    with _connect() as conn:
-        rows = conn.execute("SELECT * FROM erp.purchase_orders ORDER BY po_number").fetchall()
-    return [_po(row["po_number"]) for row in rows]
-
-
 @app.get("/po/{po_number}")
-@app.get("/api/erp/po/{po_number}")
 def get_purchase_order(po_number: str):
     result = _po(po_number)
     if result is None:
@@ -79,7 +69,6 @@ def _po(po_number: str):
 
 
 @app.get("/vendor/{vendor_id}")
-@app.get("/api/erp/vendor/{vendor_id}")
 def get_vendor(vendor_id: str):
     with _connect() as conn:
         row = conn.execute("SELECT * FROM erp.vendors WHERE upper(vendor_id)=upper(%s)", (vendor_id,)).fetchone()
@@ -88,28 +77,13 @@ def get_vendor(vendor_id: str):
     return row
 
 
-@app.get("/vendors")
-@app.get("/api/erp/vendors")
-def list_vendors():
-    with _connect() as conn:
-        return conn.execute("SELECT * FROM erp.vendors ORDER BY vendor_id").fetchall()
-
-
 @app.get("/sku/{item_code}")
-@app.get("/api/erp/sku/{item_code}")
 def get_sku(item_code: str):
     with _connect() as conn:
         row = conn.execute("SELECT * FROM erp.sku_master WHERE upper(item_code)=upper(%s)", (item_code,)).fetchone()
     if not row:
         raise HTTPException(404, "SKU not found")
     return row
-
-
-@app.get("/skus")
-@app.get("/api/erp/skus")
-def list_skus():
-    with _connect() as conn:
-        return conn.execute("SELECT * FROM erp.sku_master ORDER BY item_code").fetchall()
 
 
 if __name__ == "__main__":

@@ -101,7 +101,8 @@ def business_validation_tool(
     #  Fetch ERP data 
     po_data = _fetch_po(po_number)
     vendor_data = _fetch_vendor(vendor_id) if vendor_id else None
-    sku_data = _fetch_all_skus()
+    sku_codes = {str(item.get("item_code") or "").upper() for item in invoice_line_items}
+    sku_data = {code: _fetch_sku(code) for code in sku_codes if code}
 
     discrepancies: list[LineItemDiscrepancy] = []
 
@@ -533,19 +534,17 @@ def _fetch_vendor(vendor_id: str) -> dict | None:
         raise RuntimeError(f"ERP API unavailable for vendor {vendor_id}: {exc}") from exc
 
 
-def _fetch_all_skus() -> dict[str, dict]:
-    """Fetch all SKU records as a {item_code: record} dict.
-    Falls back to disk if the API is unavailable."""
+def _fetch_sku(item_code: str) -> dict | None:
+    """Fetch one SKU through the documented ERP route."""
     try:
         import httpx
-        resp = httpx.get(f"{ERP_API_BASE_URL}/skus", timeout=5.0)
+        resp = httpx.get(f"{ERP_API_BASE_URL}/sku/{item_code}", timeout=5.0)
         if resp.status_code == 200:
-            skus = resp.json()
-            return {
-                s["item_code"].upper(): s for s in skus
-            }
+            return resp.json()
+        if resp.status_code == 404:
+            return None
     except Exception as exc:
-        raise RuntimeError(f"ERP API unavailable for SKU master: {exc}") from exc
+        raise RuntimeError(f"ERP API unavailable for SKU {item_code}: {exc}") from exc
 
 
 # 

@@ -15,11 +15,8 @@ from backned.models.validation import ValidationResult
 from backned.models.business_validation import BusinessValidationResult
 from backned.models.reporting import InvoiceReport, ReportingSummary
 
-#  MCP client for tool access 
 from backned.tool_dispatch import invoke_tool_sync
 
-#  LangFuse observability 
-from backned.config.observability import observe, langfuse_context
 
 logger = logging.getLogger(__name__)
 
@@ -70,7 +67,6 @@ def generate_reports_node(state: ReportingState) -> dict[str, Any]:
         logger.info("Generating report: %s (email: %s)", filename, email_id)
 
         try:
-            # Invoke MCP tool (async-only tools are wrapped by invoke_tool_sync)
             report_dict = invoke_tool_sync("insight_reporter", {
                 "translation_result": tr_dict,
                 "validation_result": val_by_file.get(filename),
@@ -81,7 +77,7 @@ def generate_reports_node(state: ReportingState) -> dict[str, Any]:
             rec = report_dict.get("recommendation", "?")
             html_path = report_dict.get("report_html_path", "?")
             status_indicator = {
-                "auto_approve": "[APPROVE]",
+                "approve": "[APPROVE]",
                 "manual_review": "[REVIEW]",
                 "reject": "[REJECT]",
             }.get(rec, "[?]")
@@ -113,7 +109,7 @@ def summarize_reports_node(state: ReportingState) -> dict[str, Any]:
     reports = state.get("reports", [])
     errors = list(state.get("errors", []))
 
-    auto = sum(1 for r in reports if r.get("recommendation") == "auto_approve")
+    auto = sum(1 for r in reports if r.get("recommendation") == "approve")
     review = sum(1 for r in reports if r.get("recommendation") == "manual_review")
     reject = sum(1 for r in reports if r.get("recommendation") == "reject")
 
@@ -140,7 +136,8 @@ def build_reporting_graph():
     workflow.add_edge("generate_reports", "summarize_reports")
     workflow.add_edge("summarize_reports", END)
 
-    return workflow.compile()
+    from backned.checkpointing import compile_graph
+    return compile_graph(workflow)
 
 
 # 
@@ -152,13 +149,11 @@ class ReportingAgent:
     def __init__(self) -> None:
         self.graph = build_reporting_graph()
 
-    @observe(name="agent-reporting")
     def run(
         self,
         translation_results: list[TranslationResult],
         validation_results: list[ValidationResult],
         business_validation_results: list[BusinessValidationResult],
-        callbacks: list | None = None,
     ) -> ReportingSummary:
         """Generate HTML reports for all invoices; returns ReportingSummary."""
         logger.info("Starting Reporting Agent ...")
@@ -182,13 +177,13 @@ class ReportingAgent:
             "status": "idle",
         }
 
-        cfg = {"callbacks": callbacks} if callbacks else {}
-        final_state = self.graph.invoke(initial_state, config=cfg)
+        from backned.checkpointing import invoke_config
+        final_state = self.graph.invoke(initial_state, config=invoke_config())
 
         raw_reports = final_state.get("reports", [])
         reports = [InvoiceReport(**r) for r in raw_reports]
 
-        auto = sum(1 for r in reports if r.recommendation == "auto_approve")
+        auto = sum(1 for r in reports if r.recommendation == "approve")
         review = sum(1 for r in reports if r.recommendation == "manual_review")
         reject = sum(1 for r in reports if r.recommendation == "reject")
 
@@ -264,7 +259,7 @@ if __name__ == "__main__":
 
     for idx, r in enumerate(summary.reports, 1):
         rec_emoji = {
-            "auto_approve": "",
+            "approve": "",
             "manual_review": "",
             "reject": "",
         }.get(r.recommendation, "")

@@ -1,17 +1,4 @@
-"""RAG Pipeline — orchestrates all 5 RAG agents in sequence with conversation memory.
-
-Flow:  IndexingAgent → RetrievalAgent → AugmentationAgent → GenerationAgent → ReflectionAgent
-
-Memory is maintained in-process as a simple list of {role, content} dicts.
-The pipeline can be used as a singleton (with `get_rag_pipeline()`) so the
-index is only loaded once per Streamlit session.
-
-Observability
--------------
-Every ``query()`` call emits a LangFuse **trace** named ``rag-pipeline-query``
-with child spans for each of the 5 RAG stages and automatic generation-level
-tracing for every Azure OpenAI chat completion.
-"""
+"""Runs retrieval, augmentation, generation, and reflection for invoice Q&A."""
 
 from __future__ import annotations
 

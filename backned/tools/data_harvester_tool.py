@@ -1,4 +1,4 @@
-"""Data Harvester Tool — extracts structured invoice data from PDF, DOCX, and images via LiteLLM.
+"""Data Harvester Tool — extracts invoice data using Amazon Bedrock.
 
 Exposes a LangChain @tool for use by the Extractor Agent.
 """
@@ -12,14 +12,14 @@ from pathlib import Path
 from typing import Any
 
 from langchain_core.tools import tool
-from backned.llm import LiteLLMClient
+from backned.llm import invoke_bedrock_chat
 
 from backned.models import (
     ExtractedInvoice,
     ExtractedLineItem,
     ExtractionResult,
 )
-from backned.config.settings import LITELLM_REASONING_MODEL
+from backned.config.settings import BEDROCK_REASONING_MODEL
 
 logger = logging.getLogger(__name__)
 
@@ -27,9 +27,6 @@ logger = logging.getLogger(__name__)
 PDF_EXTS = {".pdf"}
 DOCX_EXTS = {".docx"}
 IMAGE_EXTS = {".png"}
-
-#  Module-level singleton variable 
-_client: LiteLLMClient | None = None
 
 
 # 
@@ -41,12 +38,12 @@ def data_harvester_tool(
     email_id: str = "unknown",
 ) -> dict:
     """Data Harvester Tool — Extracts structured invoice data from
-    PDF, DOCX, and image files using LiteLLM.
+    PDF, DOCX, and image files using Amazon Bedrock.
 
     1. Detects file format from extension.
-    2. For PDF/DOCX: extracts raw text offline, then sends to GPT-4o
+    2. For PDF/DOCX: extracts raw text offline, then sends to the configured Bedrock model
        for structured JSON parsing.
-    3. For images: sends directly to GPT-4o Vision for both text
+    3. For images: OCRs text and sends it to the configured Bedrock model
        extraction and structured parsing in one call.
     4. Returns an ExtractionResult dict with full structured data.
 
@@ -81,8 +78,8 @@ def data_harvester_tool(
             logger.info("Extracting text from PDF: %s", fp.name)
             raw_text = _extract_text_from_pdf(fp)
             if raw_text.strip():
-                logger.info("Parsing with GPT-4o (%d chars) ...", len(raw_text))
-                parsed_data = _parse_with_gpt(raw_text)
+                logger.info("Parsing with Bedrock (%d chars) ...", len(raw_text))
+                parsed_data = _parse_with_bedrock(raw_text)
             else:
                 errors.append("No text extracted from PDF")
 
@@ -90,20 +87,20 @@ def data_harvester_tool(
             logger.info("Extracting text from DOCX: %s", fp.name)
             raw_text = _extract_text_from_docx(fp)
             if raw_text.strip():
-                logger.info("Parsing with GPT-4o (%d chars) ...", len(raw_text))
-                parsed_data = _parse_with_gpt(raw_text)
+                logger.info("Parsing with Bedrock (%d chars) ...", len(raw_text))
+                parsed_data = _parse_with_bedrock(raw_text)
             else:
                 errors.append("No text extracted from DOCX")
 
         elif file_format == "image":
-            logger.info("Sending image to GPT-4o Vision: %s", fp.name)
-            raw_text, parsed_data = _parse_image_with_gpt_vision(fp)
+            logger.info("OCR and Bedrock parsing: %s", fp.name)
+            raw_text, parsed_data = _parse_image_with_bedrock(fp)
 
         else:
             errors.append(f"Unsupported format: {ext}")
 
     except json.JSONDecodeError as exc:
-        errors.append(f"GPT-4o returned invalid JSON: {exc}")
+        errors.append(f"Bedrock returned invalid JSON: {exc}")
         logger.error("JSON parse error for %s: %s", fp.name, exc)
     except Exception as exc:
         errors.append(f"Extraction failed for {fp.name}: {exc}")
@@ -165,18 +162,11 @@ def _detect_format(ext: str) -> str:
 
 
 # 
-# Azure OpenAI client (lazy singleton)
+# Bedrock chat model
 # 
 
-def _get_client() -> LiteLLMClient:
-    global _client
-    if _client is None:
-        _client = LiteLLMClient()
-    return _client
-
-
 # 
-# Shared GPT-4o extraction prompt
+# Shared Bedrock extraction prompt
 # 
 _EXTRACTION_SYSTEM_PROMPT = """\
 You are an expert invoice data extractor.  Your job is to extract
@@ -276,15 +266,13 @@ def _extract_text_from_docx(file_path: Path) -> str:
 
 
 # 
-# GPT-4o parsing: text → structured JSON
+# Bedrock parsing: text → structured JSON
 # 
 
-def _parse_with_gpt(raw_text: str) -> dict:
-    """Send extracted text to GPT-4o and get structured invoice JSON."""
-    client = _get_client()
-
-    response = client.chat.completions.create(
-        model=LITELLM_REASONING_MODEL,
+def _parse_with_bedrock(raw_text: str) -> dict:
+    """Send extracted text to Bedrock and get structured invoice JSON."""
+    content = invoke_bedrock_chat(
+        model_id=BEDROCK_REASONING_MODEL,
         messages=[
             {"role": "system", "content": _EXTRACTION_SYSTEM_PROMPT},
             {
@@ -300,7 +288,7 @@ def _parse_with_gpt(raw_text: str) -> dict:
         temperature=0.0,
     )
 
-    content = response.choices[0].message.content or "{}"
+    content = content or "{}"
     # Strip markdown fences if the model adds them anyway
     content = content.strip()
     if content.startswith("```"):
@@ -313,11 +301,11 @@ def _parse_with_gpt(raw_text: str) -> dict:
 
 
 # 
-# GPT-4o Vision: image → structured JSON
+# OCR and Bedrock parsing: image → structured JSON
 # 
 
-def _parse_image_with_gpt_vision(file_path: Path) -> tuple[str, dict]:
-    """OCR a PNG scan with Tesseract and parse its text with LiteLLM."""
+def _parse_image_with_bedrock(file_path: Path) -> tuple[str, dict]:
+    """OCR a PNG scan with Tesseract and parse its text with Bedrock."""
     import pytesseract
     from PIL import Image
 
@@ -326,13 +314,13 @@ def _parse_image_with_gpt_vision(file_path: Path) -> tuple[str, dict]:
     )
     if not raw_text.strip():
         return "", {}
-    return raw_text, _parse_with_gpt(raw_text)
+    return raw_text, _parse_with_bedrock(raw_text)
 
 # JSON dict → Pydantic models
 # 
 
 def _dict_to_extracted_invoice(data: dict) -> ExtractedInvoice:
-    """Convert the GPT-returned dict into an ExtractedInvoice model."""
+    """Convert the model-returned dict into an ExtractedInvoice model."""
     line_items = []
     for li in data.get("line_items", []):
         line_items.append(ExtractedLineItem(

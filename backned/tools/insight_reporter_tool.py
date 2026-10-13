@@ -225,10 +225,6 @@ def _compute_recommendation(
     bv_errors = bvr.get("total_errors", 0) if bvr else 0
     discrepancies = bvr.get("discrepancies", []) if bvr else []
     policies = rules.get("validation_policies", {})
-    invalid_currency = inv.get("currency") not in rules.get("accepted_currencies", [])
-    if invalid_currency and policies.get("invalid_currency_action") == "reject":
-        reasons.append("Currency is missing or not accepted by the configured rules")
-        return "reject", reasons
     if bvr and bvr.get("validation_status") == "po_not_found":
         reasons.append("Purchase order was not found in the ERP service")
         return "reject", reasons
@@ -239,18 +235,18 @@ def _compute_recommendation(
         return "manual_review", reasons
     reasons.append("Required fields and configured invoice checks passed")
     reasons.append("ERP comparisons found no discrepancies")
-    return "auto_approve", reasons
+    return "approve", reasons
 
 # HTML report renderer
 # 
 
 # Accent colour per recommendation
 _REC_PALETTE = {
-    "auto_approve": {"bg": "#0f5132", "light": "#d1e7dd", "text": "#0f5132", "bar": "#198754"},
+    "approve": {"bg": "#0f5132", "light": "#d1e7dd", "text": "#0f5132", "bar": "#198754"},
     "manual_review": {"bg": "#664d03", "light": "#fff3cd", "text": "#664d03", "bar": "#ffc107"},
     "reject":        {"bg": "#842029", "light": "#f8d7da", "text": "#842029", "bar": "#dc3545"},
 }
-_REC_ICONS = {"auto_approve": "✓", "manual_review": "!", "reject": "✗"}
+_REC_ICONS = {"approve": "✓", "manual_review": "!", "reject": "✗"}
 
 
 def _render_html(report: InvoiceReport, rules: dict) -> str:

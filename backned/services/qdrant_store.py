@@ -5,9 +5,9 @@ import uuid
 from typing import Any
 
 from qdrant_client import QdrantClient, models
-from litellm import embedding
+from backned.llm import embed_bedrock_documents
 
-from backned.config.settings import QDRANT_URL, LITELLM_EMBEDDING_MODEL
+from backned.config.settings import QDRANT_URL, BEDROCK_EMBEDDING_MODEL
 from backned.db.repository import list_audits
 
 COLLECTION = "invoice_audits"
@@ -34,8 +34,7 @@ def _chunks(text: str):
 def _vectors(texts: list[str]) -> list[list[float]]:
     if not texts:
         return []
-    response = embedding(model=LITELLM_EMBEDDING_MODEL, input=texts)
-    return [row["embedding"] for row in response.data]
+    return embed_bedrock_documents(BEDROCK_EMBEDDING_MODEL, texts)
 
 
 def index_all() -> dict[str, Any]:

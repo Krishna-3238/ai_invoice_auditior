@@ -1,9 +1,10 @@
 pydantic>=2.0
 langchain-core>=0.3.0
 langgraph>=0.2.0
+langgraph-checkpoint-postgres
 
-# LiteLLM routes reasoning, translation, RAG generation, and embeddings.
-litellm
+# LangChain integrations for Amazon Bedrock chat and embeddings.
+langchain-aws
 boto3
 
 # Parsing and OCR

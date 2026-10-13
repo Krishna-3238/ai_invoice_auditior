@@ -10,20 +10,11 @@ import logging
 from typing import Any
 
 from langchain_core.tools import tool
-from backned.llm import LiteLLMClient
-from backned.config.settings import LITELLM_RAG_MODEL
+from backned.llm import invoke_bedrock_chat
+from backned.config.settings import BEDROCK_RAG_MODEL
 
 
 logger = logging.getLogger(__name__)
-
-_client: LiteLLMClient | None = None
-
-def _get_client() -> LiteLLMClient:
-    global _client
-    if _client is None:
-        _client = LiteLLMClient()
-    return _client
-
 
 _SYSTEM_PROMPT = """\
 You are an expert **Invoice Audit Support Agent** helping human support staff
@@ -107,15 +98,14 @@ def response_synthesizer_tool(
     messages.append({"role": "user", "content": user_message})
 
     #  Call LLM 
-    client = _get_client()
-    resp = client.chat.completions.create(
-        model=LITELLM_RAG_MODEL,
+    answer = invoke_bedrock_chat(
+        model_id=BEDROCK_RAG_MODEL,
         messages=messages,
         temperature=0.1,
         max_tokens=1024,
     )
 
-    answer = resp.choices[0].message.content or "No response generated."
+    answer = answer or "No response generated."
 
     logger.info(
         "Synthesized answer for query='%.60s' | %d chunks | %d sources",

@@ -35,7 +35,6 @@ st.set_page_config(
 
 #  Path constants 
 REPORTS_DIR    = PROJECT_ROOT / "outputs" / "reports"
-PROCESSED_FILE = PROJECT_ROOT / "backned" / "data" / "processed_emails.json"
 RULES_PATH     = PROJECT_ROOT / "backned" / "config" / "rules.yaml"
 LOGS_FILE      = PROJECT_ROOT / "logs" / "invoice_auditor.log"
 AGENT_API_URL  = os.getenv("AGENT_API_URL", "http://localhost:8000").rstrip("/")
@@ -48,7 +47,7 @@ def _api_request(method: str, path: str, **kwargs):
 
 #  Recommendation palette 
 REC = {
-    "auto_approve":  {"label": "Auto Approve",  "pill": "pill-green", "icon": "", "color": "#198754", "bg": "#d1e7dd", "bar": "#198754"},
+    "approve":  {"label": "Approve",  "pill": "pill-green", "icon": "", "color": "#198754", "bg": "#d1e7dd", "bar": "#198754"},
     "manual_review": {"label": "Manual Review", "pill": "pill-amber", "icon": "!",  "color": "#d97706", "bg": "#fff3cd", "bar": "#ffc107"},
     "reject":        {"label": "Reject",        "pill": "pill-red",   "icon": "", "color": "#dc3545", "bg": "#f8d7da", "bar": "#dc3545"},
     "unknown":       {"label": "Unknown",       "pill": "pill-grey",  "icon": "?", "color": "#6c757d", "bg": "#f0f2f5", "bar": "#adb5bd"},
@@ -388,7 +387,7 @@ def _parse_report_html(html: str, path: Path) -> dict:
     raw_rec = m.group(1).strip().lower().replace(" ", "_") if m else "unknown"
     if raw_rec not in REC:
         if "auto" in raw_rec:
-            raw_rec = "auto_approve"
+            raw_rec = "approve"
         elif "manual" in raw_rec or "review" in raw_rec:
             raw_rec = "manual_review"
         elif "reject" in raw_rec:
@@ -456,7 +455,7 @@ def page_dashboard() -> None:
 
     reports = _read_all_reports()
     total   = len(reports)
-    auto    = sum(1 for r in reports if r["recommendation"] == "auto_approve")
+    auto    = sum(1 for r in reports if r["recommendation"] == "approve")
     manual  = sum(1 for r in reports if r["recommendation"] == "manual_review")
     reject  = sum(1 for r in reports if r["recommendation"] == "reject")
     rate    = f"{int(auto / total * 100)}% approval" if total else "no data yet"
@@ -482,7 +481,7 @@ def page_dashboard() -> None:
         return
 
     STATUS_STYLE = {
-        "auto_approve":  ("✅ Auto Approved",  "#dcfce7", "#15803d"),
+        "approve":  ("✅ Approve",  "#dcfce7", "#15803d"),
         "manual_review": ("🔍 Manual Review",  "#fef3c7", "#92400e"),
         "reject":        ("🚫 Rejected",        "#fee2e2", "#991b1b"),
         "unknown":       ("❓ Unknown",          "#f1f5f9", "#475569"),
@@ -552,7 +551,7 @@ def _render_results(results: dict) -> None:
 
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("📊 Total", len(reports))
-    c2.metric("✅ Auto-Approved", sum(r.get("recommendation") == "auto_approve" for r in reports))
+    c2.metric("✅ Approve", sum(r.get("recommendation") == "approve" for r in reports))
     c3.metric("🔍 Manual Review", sum(r.get("recommendation") == "manual_review" for r in reports))
     c4.metric("🚫 Rejected", sum(r.get("recommendation") == "reject" for r in reports))
 

@@ -1,4 +1,5 @@
 CREATE SCHEMA IF NOT EXISTS audit;
+CREATE SCHEMA IF NOT EXISTS langgraph;
 CREATE TABLE IF NOT EXISTS audit.invoice_audit (
   invoice_id UUID PRIMARY KEY,
   file_path VARCHAR(512) NOT NULL,
@@ -10,8 +11,9 @@ CREATE TABLE IF NOT EXISTS audit.invoice_audit (
   total_amount NUMERIC(14,2), validation_status VARCHAR(32),
   recommendation VARCHAR(32), extracted_raw JSONB NOT NULL DEFAULT '{}'::jsonb,
   report_json JSONB NOT NULL DEFAULT '{}'::jsonb, report_html TEXT,
-  thread_id VARCHAR(128), processed_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  thread_id VARCHAR(128), processing_error TEXT, processed_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+ALTER TABLE audit.invoice_audit ADD COLUMN IF NOT EXISTS processing_error TEXT;
 CREATE TABLE IF NOT EXISTS audit.invoice_line_items (
   id BIGSERIAL PRIMARY KEY, invoice_id UUID NOT NULL REFERENCES audit.invoice_audit(invoice_id) ON DELETE CASCADE,
   line_number INTEGER NOT NULL, item_code VARCHAR(64), description TEXT,

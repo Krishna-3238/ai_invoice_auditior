@@ -1,13 +1,4 @@
-"""Pipeline Runner — orchestrates all 6 agents end-to-end for the Streamlit UI.
-
-Observability
--------------
-Every call to ``run_full_pipeline()`` produces:
-  • A top-level LangFuse **trace** named ``invoice-auditor-pipeline``
-  • Six child **spans**, one per pipeline stage, each linked to the same trace
-  • Automatic LLM generation tracing for every Azure OpenAI call made by the
-    tools (via the ``langfuse.openai`` drop-in replacement)
-"""
+"""Runs the six invoice audit stages and captures logs for the UI."""
 
 from __future__ import annotations
 
@@ -75,7 +66,7 @@ STAGE_KEYS = ["monitor", "extract", "translate", "validate", "business_validate"
 # 
 
 class PipelineRunner:
-    """Runs the full 6-agent invoice auditing pipeline with optional UI callbacks."""
+    """Runs the full 6-agent invoice auditing pipeline with optional UI stage updates."""
 
     def run_full_pipeline(
         self,
