@@ -1,30 +1,46 @@
-pydantic>=2.0
-langchain-core>=0.3.0
-langgraph>=0.2.0
-langgraph-checkpoint-postgres
-
-# LangChain integrations for Amazon Bedrock chat and embeddings.
+# Core Frameworks
+langgraph
+langchain
 langchain-aws
-boto3
+litellm
+pydantic
 
-# Parsing and OCR
+# Google ADK (Dual-Framework Support)
+google-adk
+
+# Observability
+langfuse>=3.0,<4.0
+
+# Backend & API
+fastapi
+uvicorn
+
+# Frontend & Dashboard
+streamlit
+
+# Document Parsing & OCR
 pdfplumber
 python-docx
-Pillow
-pdf2image
 pytesseract
+pillow
 
-# Durable data, retrieval, and cache services
-psycopg[binary]
+# Translation & NLP
+transformers
+torch
+sentencepiece
+langdetect
+sacremoses
+
+# Vector Database & Embeddings
+faiss-cpu
+sentence-transformers
+numpy
 qdrant-client
+psycopg[binary]
 redis
 
-# APIs and frontend
-fastapi
-uvicorn[standard]
-streamlit
-httpx
-
-# Configuration
+# Utilities
 pyyaml
-python-dotenv
+watchdog
+python-dateutil
+requests

@@ -1,39 +1,78 @@
-# Local environment and secrets
-.env
-.env.*
-!.env.example
+# AI Invoice Auditor .gitignore
 
 # Python
 __pycache__/
 *.py[cod]
 *$py.class
+*.so
 .Python
-.venv/
-venv/
-env/
-ENV/
 build/
+develop-eggs/
 dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
 *.egg-info/
+.installed.cfg
+*.egg
 
-# Test and type-check caches
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-.coverage
-htmlcov/
+# Virtual environments
+venv/
+ENV/
+env/
+.venv/
 
-# Generated application data
-outputs/reports/*
-!outputs/reports/.gitkeep
-backned/rag_store/
-backned/data/processed_emails.json
-logs/
-*.log
-
-# Editors and operating systems
+# IDE
 .idea/
 .vscode/
+*.swp
+*.swo
+*~
+
+# Logs - exclude actual log files but keep directory structure
+logs/*.log
+logs/audit_*.log
+!logs/.gitkeep
+
+# Outputs - exclude generated reports but keep structure
+outputs/reports/*.html
+outputs/reports/*.json
+outputs/reports/*.pdf
+!outputs/reports/.gitkeep
+
+# Feedback files - exclude actual feedback but keep structure
+outputs/feedback/*.json
+!outputs/feedback/.gitkeep
+!outputs/feedback/audit_trail.json  # Optional: keep audit trail in repo
+
+# Vector database files
+data/vector_db/*.faiss
+data/vector_db/*.pkl
+
+# Incoming invoices (user uploaded)
+data/incoming/*
+!data/incoming/.gitkeep
+
+# OS files
 .DS_Store
 Thumbs.db
-desktop.ini
+
+# Environment variables
+.env
+.env.local
+*.env
+
+# Jupyter notebooks checkpoints
+.ipynb_checkpoints/
+
+# Model cache
+models/
+*.onnx
+*.pt
+*.bin
