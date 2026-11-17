@@ -1,3 +1,0 @@
-"""
-Mock ERP API Package
-"""

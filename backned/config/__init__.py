@@ -1,3 +1,0 @@
-"""
-Invoice Auditor — Config Package
-"""
