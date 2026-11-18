@@ -45,6 +45,7 @@ from protocols.mcp_protocol import get_tool_registry
 from protocols.tool_registration import initialize_all_registrations
 from guardrails import get_guardrails
 from observability import get_observability
+from langfuse import observe
 
 from config.logging_config import get_logger
 from integrations.storage import PostgresInvoiceStore, persist_workflow_result
